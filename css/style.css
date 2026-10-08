@@ -246,3 +246,7 @@ body.hide-cursor, body.hide-cursor * { cursor: none !important; }
   .row { grid-template-columns: 84px 1fr auto; }
   .btn.accent { padding: 6px 9px; }
 }
+
+.surf .del { opacity: .5; }
+.surf .del:hover { opacity: 1; background: #ff3b5c33; }
+#delBtn[hidden] { display: none; }

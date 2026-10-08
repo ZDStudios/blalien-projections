@@ -335,7 +335,8 @@
       box.append(h('div', { class: 'surf' + (s.id === ui.sel ? ' active' : '') + (s.visible ? '' : ' hidden'), onclick: () => { setSel(s.id); } },
         h('button', { class: 'ico', title: s.visible ? 'Hide' : 'Show', onclick: (e) => { e.stopPropagation(); pushUndo(); s.visible = !s.visible; commit(); } }, s.visible ? '◉' : '○'),
         h('span', { class: 'name' }, s.name),
-        h('button', { class: 'ico', title: s.locked ? 'Unlock' : 'Lock', onclick: (e) => { e.stopPropagation(); pushUndo(); s.locked = !s.locked; commit(); } }, s.locked ? '🔒' : '·')));
+        h('button', { class: 'ico', title: s.locked ? 'Unlock' : 'Lock', onclick: (e) => { e.stopPropagation(); pushUndo(); s.locked = !s.locked; commit(); } }, s.locked ? '🔒' : '·'),
+        h('button', { class: 'ico del', title: 'Delete surface', onclick: (e) => { e.stopPropagation(); removeSurface(s); } }, '🗑')));
     });
   }
 
@@ -626,6 +627,7 @@
     $('#audioBtn').classList.toggle('on', !!state.settings.audio);
     $('#boBtn').classList.toggle('on', !!state.settings.blackout);
     $('#recBtn').classList.toggle('on', !!ui.rec);
+    $('#delBtn').hidden = !sel();
     updateConn();
   }
   function updateConn() {
@@ -833,6 +835,7 @@
     },
     blackout: () => { state.settings.blackout = !state.settings.blackout; commit(); },
     record: toggleRecord,
+    delete: () => removeSurface(sel()),
     settings: () => { toggleMenu(false); settingsModal(); },
     help: () => { toggleMenu(false); helpModal(); },
     export: () => { toggleMenu(false); exportShow(); },

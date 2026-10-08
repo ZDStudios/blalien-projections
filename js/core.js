@@ -82,8 +82,9 @@ vec4 effect(vec2 uv, float time) {
     s.mask = Object.assign(BP.defMask(), src.mask || {});
     s.a = BP.defContent(src.a || {});
     s.b = BP.defContent(Object.assign({ gen: 'tunnel' }, src.b || {}));
-    if (!Array.isArray(s.pts) || s.pts.length !== 4) s.pts = BP.rectPts(0.5, 0.5, 0.3, 0.4);
-    if (!Array.isArray(s.bend) || s.bend.length !== 4) s.bend = [[0, 0], [0, 0], [0, 0], [0, 0]];
+    const ok = (a) => Array.isArray(a) && a.length === 4 && a.every((q) => Array.isArray(q) && isFinite(q[0]) && isFinite(q[1]));
+    if (!ok(s.pts)) s.pts = BP.rectPts(0.5, 0.5, 0.3, 0.4);
+    if (!ok(s.bend)) s.bend = [[0, 0], [0, 0], [0, 0], [0, 0]];
     return s;
   };
 
@@ -152,8 +153,18 @@ vec4 effect(vec2 uv, float time) {
       g = (sx * dy2 - dx2 * sy) / det;
       h = (dx1 * sy - sx * dy1) / det;
     }
-    return [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+    const H = [x1 - x0 + g * x1, x3 - x0 + h * x3, x0, y1 - y0 + g * y1, y3 - y0 + h * y3, y0, g, h, 1];
+    // w = g*u + h*v + 1 is linear, so it stays positive everywhere iff it is positive at the corners.
+    // When a quad is folded/concave it isn't, and perspective would explode into spikes.
+    const m = 0.08;
+    H.bad = !(g + 1 > m && h + 1 > m && g + h + 1 > m) || !p.every((q) => isFinite(q[0]) && isFinite(q[1]));
+    return H;
   };
+  const bilinear = (p, u, v) => [
+    (p[0][0] * (1 - u) + p[1][0] * u) * (1 - v) + (p[3][0] * (1 - u) + p[2][0] * u) * v,
+    (p[0][1] * (1 - u) + p[1][1] * u) * (1 - v) + (p[3][1] * (1 - u) + p[2][1] * u) * v,
+    1,
+  ];
   BP.applyH = (H, u, v) => {
     const w = H[6] * u + H[7] * v + H[8];
     return [(H[0] * u + H[1] * v + H[2]) / w, (H[3] * u + H[4] * v + H[5]) / w, w];
@@ -176,12 +187,27 @@ vec4 effect(vec2 uv, float time) {
   };
   BP.warp = (s, u, v, H) => {
     H = H || BP.homography(s.pts);
-    const p = BP.applyH(H, u, v);
+    const p = H.bad ? bilinear(s.pts, u, v) : BP.applyH(H, u, v);
     const d = BP.bendAt(s.bend, u, v);
     return [p[0] + d[0], p[1] + d[1], p[2]];
   };
   BP.invWarp = (s, x, y) => {
-    const Hi = BP.invert3(BP.homography(s.pts));
+    const H = BP.homography(s.pts);
+    if (H.bad) { // Newton's method on the bilinear map
+      const p = s.pts;
+      let u = 0.5, v = 0.5;
+      for (let i = 0; i < 12; i++) {
+        const q = bilinear(p, u, v), ex = q[0] - x, ey = q[1] - y;
+        const du = [(p[1][0] - p[0][0]) * (1 - v) + (p[2][0] - p[3][0]) * v, (p[1][1] - p[0][1]) * (1 - v) + (p[2][1] - p[3][1]) * v];
+        const dv = [(p[3][0] - p[0][0]) * (1 - u) + (p[2][0] - p[1][0]) * u, (p[3][1] - p[0][1]) * (1 - u) + (p[2][1] - p[1][1]) * u];
+        const det = du[0] * dv[1] - du[1] * dv[0];
+        if (Math.abs(det) < 1e-12) break;
+        u -= (ex * dv[1] - ey * dv[0]) / det;
+        v -= (ey * du[0] - ex * du[1]) / det;
+      }
+      return [u, v];
+    }
+    const Hi = BP.invert3(H);
     const p = BP.applyH(Hi, x, y);
     return [p[0], p[1]];
   };
