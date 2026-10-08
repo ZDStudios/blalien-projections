@@ -26,7 +26,11 @@ Open the live demo link. Click **Output ↗**, drag that window onto the project
 1. Add a shape (Quad, Circle, Box, Text, Silhouette, Freehand and more).
 2. Drag the round corners onto your real object. Drag the diamond handles to bend an edge around a curve. Press **P** to show the outlines on the projector while you work.
 3. Under **Content**, choose what plays: built-in visuals, your media, the camera, a drawing, text, a custom GLSL shader, or black to block light.
-4. Add **Effects**, turn on **Audio** so the visuals react to music, and save **Scenes**.
+4. Map right on the projector if you like: click the output window and press **P**. You can then drag corners directly on the wall with the mouse, and the editor updates live.
+5. Add **Effects**, turn on **Audio** so the visuals react to music, and save **Scenes**.
+
+## Editor and projector always match
+The output window reports its real resolution. The editor stage then takes the same shape automatically (for example 16:9 or 4:3), so a shape that lines up in the editor lines up on the projector. Positions are stored relative to the screen, so they don't depend on resolution. To set the shape by hand, use **Settings → Output shape**; this turns off the automatic matching.
 
 ## Features
 - Corner-pin perspective warping, edge bending, and linked corners that stay together (for example on a box)

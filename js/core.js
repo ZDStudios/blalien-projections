@@ -55,7 +55,7 @@ vec4 effect(vec2 uv, float time) {
   });
 
   BP.defSettings = () => ({
-    aspect: 16 / 9, master: 1, xfade: 0, blackout: false, bpm: 120, beatT0: 0,
+    aspect: 16 / 9, autoAspect: true, master: 1, xfade: 0, blackout: false, bpm: 120, beatT0: 0,
     audio: false, audioGain: 1.5, showOnOutput: false, testPattern: false, fade: 1, bg: '#000000',
   });
 

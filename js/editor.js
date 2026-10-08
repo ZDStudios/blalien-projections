@@ -761,13 +761,14 @@
       let v = sel.value;
       if (v === 'custom') { const r = prompt('Output resolution or ratio (e.g. 1920x1080 or 2.35)', '1920x1080'); if (!r) return; const m = r.match(/([\d.]+)\s*[x:×/]\s*([\d.]+)/); v = m ? m[1] / m[2] : parseFloat(r); }
       if (!(v > 0)) return;
-      pushUndo(); state.settings.aspect = +v; commit();
+      pushUndo(); state.settings.aspect = +v; state.settings.autoAspect = false; commit(); syncValues(true);
     };
     const outs = Object.values(ui.outputs).filter((o) => Date.now() - o.t < 12000);
     const add = (el, path) => { staticBound.push(bindEl(el, path, el.type === 'checkbox' ? 'check' : el.type === 'range' ? 'range' : 'color')); return el; };
     openModal('Settings',
       row('Output shape', sel),
       outs.length ? h('div', { class: 'btnrow' }, outs.map((o) => btn(`Match output ${o.w}×${o.h}`, () => { pushUndo(); state.settings.aspect = o.w / o.h; commit(); closeModal(); }))) : h('p', { class: 'note' }, 'Open the output on the projector and its resolution appears here.'),
+      h('label', { class: 'check' }, add(h('input', { type: 'checkbox' }), 'S.autoAspect'), h('span', {}, 'Match the projector shape automatically (recommended)')),
       h('label', { class: 'check' }, add(h('input', { type: 'checkbox' }), 'S.showOnOutput'), h('span', {}, 'Show outlines & handles on the projector while mapping (P)')),
       h('label', { class: 'check' }, add(h('input', { type: 'checkbox' }), 'S.testPattern'), h('span', {}, 'Show test grid on the projector (T)')),
       row('Scene fade (s)', add(h('input', { type: 'range', min: 0, max: 5, step: 0.1 }), 'S.fade')),
@@ -783,7 +784,7 @@
     openModal('How it works',
       h('ol', { class: 'steps' },
         h('li', {}, 'Connect the projector as a second screen. Click ', h('b', {}, 'Output ↗'), ', drag that window onto the projector and click it to go fullscreen. You can also open the output link on any device plugged into a projector.'),
-        h('li', {}, 'Add shapes and drag their corners until they sit exactly on your real objects. Turn on ', h('b', {}, 'P'), ' to see the outlines on the projector while you work.'),
+        h('li', {}, 'Add shapes and drag their corners until they sit exactly on your real objects. Turn on ', h('b', {}, 'P'), ' to see the outlines on the projector while you work. You can also click the output window, press P there, and drag corners directly on the projector. The editor stage automatically matches the projector shape, so both line up exactly.'),
         h('li', {}, 'Choose what plays on each surface under ', h('b', {}, 'Content'), ': built-in visuals, your own photos and videos, a drawing, text, the camera, or your own GLSL shader.'),
         h('li', {}, 'Add ', h('b', {}, 'Effects'), ', switch on ', h('b', {}, 'Audio'), ' so it moves with music, and save ', h('b', {}, 'Scenes'), '. Each surface has two channels (A and B), and the crossfader blends between them.')),
       h('table', { class: 'keys' }, keys.map(([k, d]) => h('tr', {}, h('td', {}, h('kbd', {}, k)), h('td', {}, d)))));
@@ -868,7 +869,7 @@
     return null;
   }
   function hitBody(s, p) { const [u, v] = BP.invWarp(s, p[0], p[1]); return u >= 0 && u <= 1 && v >= 0 && v <= 1; }
-  const canEditStage = () => !IS_OUTPUT && (!ui.present || state.settings.showOnOutput);
+  const canEditStage = () => (IS_OUTPUT ? state.settings.showOnOutput : !ui.present || state.settings.showOnOutput);
 
   function onDown(e) {
     if (!canEditStage() || e.button === 2) return;
@@ -1010,7 +1011,7 @@
     if (S.testPattern) drawTestPattern(ctx, W, H, dpr);
     const showHandles = IS_OUTPUT || ui.present ? S.showOnOutput : true;
     if (!showHandles) return;
-    const selId = IS_OUTPUT ? ui.remoteSel : ui.sel;
+    const selId = ui.sel;
     const P = (q) => [q[0] * W, q[1] * H];
     for (const s of state.surfaces) {
       const selected = s.id === selId;
@@ -1047,7 +1048,7 @@
       });
       // corners
       s.pts.forEach((pt, i) => {
-        const q = P(pt), act = i === ui.activeCorner && !IS_OUTPUT;
+        const q = P(pt), act = i === ui.activeCorner;
         ctx.beginPath(); ctx.arc(q[0], q[1], (act ? 10 : 8) * dpr, 0, Math.PI * 2);
         ctx.fillStyle = act ? '#ff2bd6' : 'rgba(0,229,255,0.95)'; ctx.fill();
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * dpr; ctx.stroke();
@@ -1112,18 +1113,32 @@
   // ------------------------------------------------------------ remote
   function onRemoteState(st) {
     if (ui.drag) return; // don't yank the thing being dragged
+    const oldAspect = state.settings.aspect;
     state = BP.normalize(st);
+    if (!IS_OUTPUT && Math.abs(oldAspect - state.settings.aspect) > 0.002) toast('Stage now matches the projector shape (' + aspectLabel(state.settings.aspect) + ')');
     if (ui.sel && !sel()) ui.sel = null;
     scheduleUI();
   }
   function onMsg(m) {
-    if (m.type === 'sel') ui.remoteSel = m.data && m.data.id;
+    if (m.type === 'sel') { ui.sel = (m.data && m.data.id) || null; ui.activeCorner = null; scheduleUI(); }
     else if (m.type === 'hello' && IS_OUTPUT) announce();
     else if (m.type === 'output' && !IS_OUTPUT) { ui.outputs[m.from] = Object.assign({ t: Date.now() }, m.data); updateConn(); }
   }
-  function announce() {
+  function aspectLabel(a) {
+    const known = [[16 / 9, '16:9'], [16 / 10, '16:10'], [4 / 3, '4:3'], [21 / 9, '21:9'], [1, '1:1'], [9 / 16, '9:16']];
+    const k = known.find(([v]) => Math.abs(v - a) < 0.01);
+    return k ? k[1] : a.toFixed(2) + ':1';
+  }
+  // The output tells everyone its real size. With "match automatically" on, it also sets the
+  // stage shape, so the editor shows exactly what lands on the projector (same proportions).
+  function announce(apply) {
     const dpr = window.devicePixelRatio || 1;
     BP.Sync.send('output', { w: Math.round(innerWidth * dpr), h: Math.round(innerHeight * dpr) });
+    const a = innerWidth / Math.max(1, innerHeight);
+    if (apply && state.settings.autoAspect && innerHeight > 50 && Math.abs(state.settings.aspect - a) > 0.002) {
+      state.settings.aspect = a;
+      commit();
+    }
   }
 
   // ------------------------------------------------------------ keyboard
@@ -1132,7 +1147,8 @@
     if (tag === 'input' && !['range', 'checkbox', 'color'].includes(e.target.type) || tag === 'textarea' || tag === 'select') return;
     const k = e.key, mod = e.ctrlKey || e.metaKey;
     if (k === 'f' || k === 'F') { if (!mod) { toggleFullscreen(); e.preventDefault(); } return; }
-    if (IS_OUTPUT) return;
+    if (IS_OUTPUT && 'hHvVdDmM'.includes(k) && k.length === 1) return;
+    if (IS_OUTPUT && k === 'Escape') { setSel(null); return; }
     if (mod && (k === 'z' || k === 'Z')) { e.shiftKey ? redo() : undo(); e.preventDefault(); return; }
     if (mod && (k === 'y' || k === 'Y')) { redo(); e.preventDefault(); return; }
     if (mod && (k === 'd' || k === 'D')) { const s = sel(); if (s) duplicate(s); e.preventDefault(); return; }
@@ -1149,7 +1165,12 @@
       case 'v': case 'V': setTool('select'); break;
       case 'd': case 'D': setTool('draw'); break;
       case 'm': case 'M': setTool('mask'); break;
-      case 'p': case 'P': state.settings.showOnOutput = !state.settings.showOnOutput; toast('Outlines on projector: ' + (state.settings.showOnOutput ? 'on' : 'off')); commit(); break;
+      case 'p': case 'P':
+        state.settings.showOnOutput = !state.settings.showOnOutput;
+        toast(IS_OUTPUT
+          ? (state.settings.showOnOutput ? 'Mapping on the projector: drag corners right here. Press P when done.' : 'Mapping off')
+          : 'Outlines on projector: ' + (state.settings.showOnOutput ? 'on (you can also drag corners on the output)' : 'off'), 4000);
+        commit(); break;
       case 't': case 'T': state.settings.testPattern = !state.settings.testPattern; commit(); break;
       case 'b': case 'B': ACTIONS.blackout(); break;
       case ' ': tap(); e.preventDefault(); break;
@@ -1219,20 +1240,26 @@
   function initOutput() {
     document.body.classList.add('output', 'present');
     const hint = $('#hint');
-    hint.textContent = 'Output ready · click to go fullscreen · F toggles fullscreen';
+    hint.textContent = 'Output ready · click for fullscreen · press P to map directly on this screen';
     hint.classList.add('show');
     setTimeout(() => { if (!hint.dataset.mode) hint.classList.remove('show'); }, 5000);
+    ov.addEventListener('pointerdown', onDown);
+    ov.addEventListener('pointermove', onMove);
+    ov.addEventListener('pointerup', onUp);
+    ov.addEventListener('pointercancel', onUp);
+    ov.addEventListener('dblclick', onDbl);
     document.addEventListener('click', () => {
-      if (!document.fullscreenElement) toggleFullscreen();
+      if (!document.fullscreenElement && !state.settings.showOnOutput) toggleFullscreen();
       if (BP.Audio.ctx) BP.Audio.ctx.resume();
       R.media.forEach((m) => m.el && m.el.play && m.el.play().catch(() => {}));
     });
     window.addEventListener('keydown', onKey);
     let idle;
-    document.addEventListener('mousemove', () => { document.body.classList.remove('hide-cursor'); clearTimeout(idle); idle = setTimeout(() => document.body.classList.add('hide-cursor'), 2000); });
-    window.addEventListener('resize', announce);
-    announce();
-    setInterval(announce, 5000);
+    document.addEventListener('mousemove', () => { document.body.classList.remove('hide-cursor'); clearTimeout(idle); idle = setTimeout(() => { if (!state.settings.showOnOutput) document.body.classList.add('hide-cursor'); }, 2000); });
+    let rt;
+    window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => announce(true), 300); });
+    announce(true);
+    setInterval(() => announce(false), 5000);
     document.title = 'Output · Blalien Projections';
   }
 
