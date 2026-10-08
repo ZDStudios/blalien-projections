@@ -1,0 +1,12 @@
+{
+  "name": "blalien-projections",
+  "version": "1.0.0",
+  "description": "Browser projection mapping inspired by Lazy Lighting. Warp visuals, photos and videos onto real objects, controlled from any device on your network.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js --open",
+    "serve": "node server.js"
+  },
+  "engines": { "node": ">=16" },
+  "license": "MIT"
+}

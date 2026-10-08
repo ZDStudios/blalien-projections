@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "blalien", "runtimeExecutable": "node", "runtimeArgs": ["server.js", "8080"], "port": 8080 }
+  ]
+}
